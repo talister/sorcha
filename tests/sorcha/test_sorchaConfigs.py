@@ -5,6 +5,7 @@ from sorcha.lightcurves.lightcurve_registration import LC_METHODS
 from sorcha.activity.activity_registration import CA_METHODS
 from sorcha.utilities.sorchaConfigs import (
     sorchaConfigs,
+    basesorchaConfigs,
     inputConfigs,
     simulationConfigs,
     filtersConfigs,
@@ -48,7 +49,7 @@ correct_filters = {
 
 correct_saturation = {
     "bright_limit_on": True,
-    "bright_limit": 16.0,
+    "bright_limit": [16.0, 16.0, 16.0, 16.0, 16.0, 16.0],
     "_observing_filters": ["r", "g", "i", "z", "u", "y"],
 }
 correct_saturation_read = {"bright_limit": "16.0", "_observing_filters": ["r", "g", "i", "z", "u", "y"]}
@@ -59,6 +60,8 @@ correct_fadingfunction = {
     "fading_function_on": True,
     "fading_function_width": 0.1,
     "fading_function_peak_efficiency": 1.0,
+    "survey_name": "rubin_sim",
+    "des_transient_efficency": None,
 }
 
 correct_linkingfilter = {
@@ -71,11 +74,20 @@ correct_linkingfilter = {
     "ssp_number_tracklets": 3,
     "ssp_track_window": 15,
     "ssp_night_start_utc": 16.0,
+    "survey_name": "rubin_sim",
+    "distance_cut_on": None,
+    "distance_cut_upper": None,
+    "distance_cut_lower": None,
+    "motion_cut_on": None,
+    "motion_cut_upper": None,
+    "motion_cut_lower": None,
+    "des_discovery_on": None,
 }
 
 correct_fov = {
     "camera_model": "footprint",
     "footprint_path": None,
+    "visits_query": None,
     "fill_factor": None,
     "circle_radius": None,
     "footprint_edge_threshold": 2.0,
@@ -105,12 +117,14 @@ correct_expert = {
     "randomization_on": True,
     "vignetting_on": True,
     "brute_force": True,
+    "camera_model": None,
+    "survey_name": "rubin_sim",
 }
 
 correct_auxciliary_URLs = {
     "de440s.bsp": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp",
-    "earth_200101_990827_predict.bpc": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/earth_200101_990827_predict.bpc",
-    "earth_620120_240827.bpc": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/earth_620120_240827.bpc",
+    "earth_2025_250826_2125_predict.bpc": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/earth_2025_250826_2125_predict.bpc",
+    "earth_620120_250826.bpc": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/earth_620120_250826.bpc",
     "earth_latest_high_prec.bpc": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/earth_latest_high_prec.bpc",
     "linux_p1550p2650.440": "https://ssd.jpl.nasa.gov/ftp/eph/planets/Linux/de440/linux_p1550p2650.440",
     "sb441-n16.bsp": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
@@ -120,8 +134,8 @@ correct_auxciliary_URLs = {
 }
 correct_auxciliary_filenames = [
     "de440s.bsp",
-    "earth_200101_990827_predict.bpc",
-    "earth_620120_240827.bpc",
+    "earth_2025_250826_2125_predict.bpc",
+    "earth_620120_250826.bpc",
     "earth_latest_high_prec.bpc",
     "linux_p1550p2650.440",
     "sb441-n16.bsp",
@@ -143,22 +157,41 @@ def test_sorchaConfigs():
     # general test to make sure, overall, everything works. checks just one file: sorcha_config_demo.ini
 
     config_file_location = get_demo_filepath("sorcha_config_demo.ini")
-    test_configs = sorchaConfigs(config_file_location, "rubin_sim")
+    test_configs_file = sorchaConfigs(config_file_location, "rubin_sim")
+
+    # test we can make a config without needing to read a file
+    test_configs_nofile = basesorchaConfigs(
+        survey_name="rubin_sim",
+        input=inputConfigs(**correct_inputs),
+        simulation=simulationConfigs(**correct_simulation),
+        filters=filtersConfigs(**correct_filters),
+        saturation=saturationConfigs(**correct_saturation),
+        phasecurves=phasecurvesConfigs(**correct_phasecurve),
+        fov=fovConfigs(**correct_fov),
+        fadingfunction=fadingfunctionConfigs(**correct_fadingfunction),
+        linkingfilter=linkingfilterConfigs(**correct_linkingfilter),
+        output=outputConfigs(**correct_output),
+        lightcurve=lightcurveConfigs(**correct_lc_model),
+        activity=activityConfigs(**correct_activity),
+        expert=expertConfigs(**correct_expert),
+        auxiliary=auxiliaryConfigs(),
+    )
     # check each section to make sure you get what you expect
-    assert correct_inputs == test_configs.input.__dict__
-    assert correct_simulation == test_configs.simulation.__dict__
-    assert correct_filters == test_configs.filters.__dict__
-    assert correct_saturation == test_configs.saturation.__dict__
-    assert correct_phasecurve == test_configs.phasecurves.__dict__
-    assert correct_fov == test_configs.fov.__dict__
-    assert correct_fadingfunction == test_configs.fadingfunction.__dict__
-    assert correct_linkingfilter == test_configs.linkingfilter.__dict__
-    assert correct_output == test_configs.output.__dict__
-    assert correct_lc_model == test_configs.lightcurve.__dict__
-    assert correct_activity == test_configs.activity.__dict__
-    assert correct_expert == test_configs.expert.__dict__
-    assert correct_auxciliary_URLs == test_configs.auxiliary.__dict__["urls"]
-    assert correct_auxciliary_filenames == test_configs.auxiliary.__dict__["data_file_list"]
+    for test_configs in [test_configs_file, test_configs_nofile]:
+        assert correct_inputs == test_configs.input.__dict__
+        assert correct_simulation == test_configs.simulation.__dict__
+        assert correct_filters == test_configs.filters.__dict__
+        assert correct_saturation == test_configs.saturation.__dict__
+        assert correct_phasecurve == test_configs.phasecurves.__dict__
+        assert correct_fov == test_configs.fov.__dict__
+        assert correct_fadingfunction == test_configs.fadingfunction.__dict__
+        assert correct_linkingfilter == test_configs.linkingfilter.__dict__
+        assert correct_output == test_configs.output.__dict__
+        assert correct_lc_model == test_configs.lightcurve.__dict__
+        assert correct_activity == test_configs.activity.__dict__
+        assert correct_expert == test_configs.expert.__dict__
+        assert correct_auxciliary_URLs == test_configs.auxiliary.__dict__["urls"]
+        assert correct_auxciliary_filenames == test_configs.auxiliary.__dict__["data_file_list"]
 
 
 ##################################################################################################################################
@@ -404,6 +437,15 @@ def test_saturationConfigs():
         error_text.value.code == "ERROR: could not parse brightness limits. Check formatting and try again."
     )
 
+    # Make sure it can take a simple float
+    bright_limit = 2.0
+    manual_saturation_config = saturationConfigs(bright_limit=bright_limit, _observing_filters=["g"])
+    assert manual_saturation_config.bright_limit[0] == bright_limit
+
+    # Cast float to a list if there are multiple filters
+    manual_saturation_config = saturationConfigs(bright_limit=bright_limit, _observing_filters=["g", "r"])
+    assert len(manual_saturation_config.bright_limit) == 2
+
 
 @pytest.mark.parametrize("key_name", ["_observing_filters"])
 def test_saturationConfigs_mandatory(key_name):
@@ -493,7 +535,7 @@ def test_fovConfigs_inlist():
         test_configs = fovConfigs(**fov_configs)
     assert (
         error_text.value.code
-        == "ERROR: value fake_model for config parameter camera_model not recognised. Expecting one of: ['circle', 'footprint', 'none']."
+        == "ERROR: value fake_model for config parameter camera_model not recognised. Expecting one of: ['circle', 'footprint', 'visits_footprint', 'none']."
     )
 
 
@@ -512,7 +554,7 @@ def test_fovConfigs_surveyname():
         test_configs = fovConfigs(**fov_configs)
     assert (
         error_text.value.code
-        == "ERROR: a default detector footprint is currently only provided for LSST; please provide your own footprint file."
+        == "ERROR: a default detector footprint is currently only provided for LSST and DES; please provide your own footprint file."
     )
 
 
@@ -546,6 +588,34 @@ def test_fovConfigs_circle_mandatory():
     assert (
         error_text.value.code
         == 'ERROR: either "fill_factor" or "circle_radius" must be specified for circular footprint.'
+    )
+
+
+def test_fovConfigs_visits_footprint():
+    """
+    Makes sure the code fails when using visits_footprint and having an edge thresh
+    """
+
+    fov_configs = correct_fov.copy()
+    fov_configs["survey_name"] = "DES"
+    fov_configs["camera_model"] = "visits_footprint"
+
+    fov_configs["visits_query"] = "something"
+
+    with pytest.raises(SystemExit) as error_text:
+        test_configs = fovConfigs(**fov_configs)
+    assert (
+        error_text.value.code
+        == "ERROR: footprint_edge_threshold supplied in config file But visits footprint does not use edge threshold"
+    )
+
+    fov_configs["visits_query"] = None
+
+    with pytest.raises(SystemExit) as error_text:
+        test_configs = fovConfigs(**fov_configs)
+    assert (
+        error_text.value.code
+        == "ERROR: No value found for required key visits_query in config file. Please check the file and try again."
     )
 
 
@@ -607,6 +677,37 @@ def test_fadingfunctionConfig_on_float(key_name):
     assert (
         error_text.value.code
         == f"ERROR: expected a float for config parameter {key_name}. Check value in config file."
+    )
+
+
+def test_fadingfunctionConfig_on_float():
+    """
+    Tests that wrong inputs for fadingfunctionConfig float attributes is caught correctly
+    """
+
+    fadingfunction_configs = correct_fadingfunction.copy()
+
+    "set up for des"
+    fadingfunction_configs["survey_name"] = "des"
+    fadingfunction_configs["fading_function_peak_efficiency"] = None
+    fadingfunction_configs["fading_function_width"] = None
+
+    fadingfunction_configs["des_transient_efficency"] = None
+
+    # transit efficency goes to 1 if None
+    test_configs = fadingfunctionConfigs(**fadingfunction_configs)
+    fadingfunction_configs["des_transient_efficency"] = 1
+
+    # test cast as float
+    assert test_configs.__dict__ == fadingfunction_configs
+
+    fadingfunction_configs["des_transient_efficency"] = "ten"
+    with pytest.raises(SystemExit) as error_text:
+        test_configs = fadingfunctionConfigs(**fadingfunction_configs)
+
+    assert (
+        error_text.value.code
+        == f"ERROR: expected a float for config parameter des_transient_efficency. Check value in config file."
     )
 
 
@@ -725,12 +826,23 @@ def test_linkingfilter_bounds(key_name):
             test_configs = linkingfilterConfigs(**linkingfilter_configs)
 
         assert error_text.value.code == f"ERROR: {key_name} is negative."
-    elif key_name == "ssp_separation_threshold" or key_name == "ssp_number_observations":
+    elif key_name == "ssp_number_observations":
         linkingfilter_configs[key_name] = -5
         with pytest.raises(SystemExit) as error_text:
             test_configs = linkingfilterConfigs(**linkingfilter_configs)
 
         assert error_text.value.code == f"ERROR: {key_name} is zero or negative."
+    elif key_name == "ssp_separation_threshold":
+        linkingfilter_configs[key_name] = -5
+        with pytest.raises(SystemExit) as error_text:
+            test_configs = linkingfilterConfigs(**linkingfilter_configs)
+        assert error_text.value.code == f"ERROR: {key_name} is negative."
+
+        linkingfilter_configs[key_name] = 0
+        with pytest.raises(SystemExit) as error_text:
+            test_configs = linkingfilterConfigs(**linkingfilter_configs)
+        assert error_text.value.code == f"ERROR: {key_name} is zero."
+
     elif key_name == "ssp_number_tracklets":
         linkingfilter_configs[key_name] = -5
         with pytest.raises(SystemExit) as error_text:
@@ -789,6 +901,74 @@ def test_linkingfilter_bool():
         error_text.value.code
         == f"ERROR: expected a bool for config parameter drop_unlinked. Check value in config file."
     )
+
+
+@pytest.mark.parametrize(
+    "key_name, prob_name",
+    [
+        ("distance_cut_upper", "distance_cut_lower"),
+        ("distance_cut_lower", "distance_cut_upper"),
+        ("motion_cut_upper", "motion_cut_lower"),
+        ("motion_cut_lower", "motion_cut_upper"),
+    ],
+)
+def test_linkingfilter_descuts_exists(key_name, prob_name):
+    """
+    tests the descut inputs in the linkingfilter
+    """
+
+    linkingfilter_configs = correct_linkingfilter.copy()
+
+    linkingfilter_configs[key_name] = 10
+
+    with pytest.raises(SystemExit) as error_text:
+        test_configs = linkingfilterConfigs(**linkingfilter_configs)
+
+    assert (
+        error_text.value.code
+        == f"ERROR: No value found for required key {prob_name} in config file. Please check the file and try again."
+    )
+
+
+@pytest.mark.parametrize(
+    "key_name, prob_name",
+    [
+        ("distance_cut_upper", "distance_cut_lower"),
+        ("distance_cut_lower", "distance_cut_upper"),
+        ("motion_cut_upper", "motion_cut_lower"),
+        ("motion_cut_lower", "motion_cut_upper"),
+    ],
+)
+def test_linkingfilter_descuts_float(key_name, prob_name):
+    """
+    tests that the descut inputs are float in the linkingfilter
+    """
+
+    linkingfilter_configs = correct_linkingfilter.copy()
+
+    linkingfilter_configs[key_name] = 10.0
+    linkingfilter_configs[prob_name] = "str"
+
+    with pytest.raises(SystemExit) as error_text:
+        test_configs = linkingfilterConfigs(**linkingfilter_configs)
+
+    assert (
+        error_text.value.code
+        == f"ERROR: expected a float for config parameter {prob_name}. Check value in config file."
+    )
+
+
+def test_linkingfilter_wrongsurvey():
+    """
+    makes sure DEScuts are only used in DES
+    """
+    linkingfilter_configs = correct_linkingfilter.copy()
+    linkingfilter_configs["distance_cut_on"] = True
+
+    with pytest.raises(SystemExit) as error_text:
+        test_configs = linkingfilterConfigs(**linkingfilter_configs)
+
+    assert error_text.value.code == "ERROR: distance cut and motion cut is a DES only feature"
 
 
 ##################################################################################################################################
@@ -940,7 +1120,7 @@ def test_expert_config_float(key_name):
     )
 
 
-@pytest.mark.parametrize("key_name, error_name", [("snr_limit", "SNR"), ("mag_limit", "magnitude")])
+@pytest.mark.parametrize("key_name, error_name", [("snr_limit", "SNRPSFMag"), ("mag_limit", "magnitude")])
 def test_expert_config_bounds(key_name, error_name):
     """
     Tests that values in expertConfigs are creating error messages when out of bounds
@@ -1057,6 +1237,7 @@ def test_PrintConfigsToLog(tmp_path):
         "loglevel": True,
         "seed": 24601,
         "stats": None,
+        "visits_database": None,
     }
     test_configs = sorchaConfigs(config_file_location, "rubin_sim")
     test_configs.filters.mainfilter = "r"

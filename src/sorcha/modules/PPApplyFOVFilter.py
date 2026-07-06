@@ -3,9 +3,10 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 
 from sorcha.utilities.sorchaModuleRNG import PerModuleRNG
+from sorcha.modules.PPVisitsFootprintFilter import PPVisitsFootprint
 
 
-def PPApplyFOVFilter(observations, sconfigs, module_rngs, footprint=None, verbose=False):
+def PPApplyFOVFilter(observations, sconfigs, module_rngs, visits=None, footprint=None, verbose=False):
     """
     Wrapper function for PPFootprintFilter and PPFilterDetectionEfficiency that checks to see
     whether a camera footprint filter should be applied or if a simple fraction of the
@@ -28,13 +29,11 @@ def PPApplyFOVFilter(observations, sconfigs, module_rngs, footprint=None, verbos
     module_rngs : PerModuleRNG
         A collection of random number generators (per module).
 
-    footprint: Footprint
+    footprint: Footprint, default=None
         A Footprint class object that represents the boundaries of the detector(s).
-        Default: None.
 
-    verbose: boolean
+    verbose: boolean, default=False
         Controls whether logging in verbose mode is on or off.
-        Default: False
 
     Returns
     -----------
@@ -54,6 +53,20 @@ def PPApplyFOVFilter(observations, sconfigs, module_rngs, footprint=None, verbos
         observations = observations.iloc[onSensor].copy()
         observations["detectorID"] = detectorIDs
 
+        observations = observations.sort_index()
+
+    if sconfigs.fov.camera_model == "visits_footprint":
+        verboselog("Applying sensor footprint filter...")
+        onSensor, detectorIDs, lim_mag = PPVisitsFootprint(
+            observations,
+            sconfigs.fov.visits_query,
+            visits,
+            ephermers_buffer=sconfigs.simulation.ar_ang_fov + sconfigs.simulation.ar_fov_buffer,
+        )
+
+        observations = observations.iloc[onSensor].copy()
+        observations["detectorID"] = detectorIDs
+        observations["limMag_perChip"] = lim_mag
         observations = observations.sort_index()
 
     if sconfigs.fov.camera_model == "circle":
@@ -152,9 +165,8 @@ def PPSimpleSensorArea(ephemsdf, module_rngs, fillfactor=0.9):
     module_rngs : PerModuleRNG
         A collection of random number generators (per module).
 
-    fillfactor : float
+    fillfactor : float, default=0.9
         fraction of FOV covered by the sensor.
-        Default = 0.9
 
     Returns
     ----------

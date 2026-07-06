@@ -69,7 +69,8 @@ def addUncertainties(detDF, sconfigs, module_rngs, verbose=True):
     - astrometricSigma_deg
     - trailedSourceMagSigma
     - PSFMagSigma
-    - SNR
+    - SNRPSFMag
+    - SNRTrailedSourceMag
     - trailedSourceMag
     - PSFMag
 
@@ -84,8 +85,8 @@ def addUncertainties(detDF, sconfigs, module_rngs, verbose=True):
     module_rngs : PerModuleRNG
         A collection of random number generators (per module).
 
-    verbose: Boolean, optional
-    Verbose Logging Flag. Default = True
+    verbose: Boolean, default=True
+    Verbose Logging Flag.
 
     Returns
     -------
@@ -97,97 +98,43 @@ def addUncertainties(detDF, sconfigs, module_rngs, verbose=True):
     pplogger = logging.getLogger(__name__)
     verboselog = pplogger.info if verbose else lambda *a, **k: None
 
-    detDF["astrometricSigma_deg"], detDF["trailedSourceMagSigma"], detDF["SNR"] = uncertainties(
-        detDF, sconfigs, filterMagName="trailedSourceMagTrue"
-    )
-
     if sconfigs.expert.trailing_losses_on:
-        _, detDF["PSFMagSigma"], detDF["SNR"] = uncertainties(detDF, sconfigs, filterMagName="PSFMagTrue")
-    else:
-        detDF["PSFMagSigma"] = detDF["trailedSourceMagSigma"]
-
-    return detDF
-
-
-def uncertainties(
-    detDF,
-    sconfigs,
-    limMagName="fiveSigmaDepth_mag",
-    seeingName="seeingFwhmGeom_arcsec",
-    filterMagName="trailedSourceMagTrue",
-    dra_name="RARateCosDec_deg_day",
-    ddec_name="DecRate_deg_day",
-    dec_name="Dec_deg",
-    visit_time_name="visitExposureTime",
-):
-    """
-    Add astrometric and photometric uncertainties to observations.
-
-    Parameters
-    ----------
-    detDF : Pandas dataframe
-        dataframe containing observations.
-
-    sconfigs: dataclass
-        Dataclass of configuration file arguments.
-
-    limMagName : string, optional
-        pandas dataframe column name of the limiting magnitude.
-        Default = "fiveSigmaDepth_mag"
-
-    seeingName : string, optional
-        pandas dataframe column name of the seeing
-        Default = "seeingFwhmGeom_arcsec"
-
-    filterMagName : string, optional
-        pandas dataframe column name of the object magnitude
-        Default = "trailedSourceMagTrue"
-
-    dra_name : string, optional
-        pandas dataframe column name of the object RA rate
-        Default = "RARateCosDec_deg_day"
-
-    ddec_name: string, optional
-        pandas dataframe column name of the object declination rate
-        Default = "DecRate_deg_day"
-
-    dec_name : string, optional
-        pandas dataframe column name of the object declination
-        Default = "Dec_deg"
-
-    visit_time_name : string, optional
-        pandas dataframe column name for exposure length
-        Default = "visitExposureTime"
-
-    Returns
-    -------
-    astrSigDeg: numpy array
-        astrometric uncertainties in degrees.
-
-    photometric_sigma: numpy array
-        photometric uncertainties in magnitude.
-
-    SNR: numpy array
-        signal-to-noise ratio.
-    """
-
-    if sconfigs.expert.trailing_losses_on:
+        # calculate the dMag offset that when added to the trailed apparent magnitude will
+        # give the equivalent point source with the same SNR. This makes it easier to calculate
+        # SNR later on and uncertainty. This is because trailed sources cover more pixels and will have lower SNR
+        # than a point source of the same measured flux. It's easier to calculate dMag and use
+        # the equations for point sources for SNR and uncertainty
         dMag = PPTrailingLoss.calcTrailingLoss(
-            detDF[dra_name],
-            detDF[ddec_name],
-            detDF[seeingName],
-            texp=detDF[visit_time_name],
+            detDF["RARateCosDec_deg_day"],
+            detDF["DecRate_deg_day"],
+            detDF["seeingFwhmGeom_arcsec"],
+            texp=detDF["visitExposureTime"],
+            model="trailedSource",
         )
     else:
         dMag = 0.0
 
-    astrSig, SNR, _ = calcAstrometricUncertainty(
-        detDF[filterMagName] + dMag, detDF[limMagName], FWHMeff=detDF[seeingName] * 1000, output_units="mas"
+    detDF["astrometricSigma_deg"], detDF["SNRTrailedSourceMag"], _ = calcAstrometricUncertainty(
+        detDF["trailedSourceMagTrue"] + dMag,
+        detDF["fiveSigmaDepth_mag"],
+        FWHMeff=detDF["seeingFwhmGeom_arcsec"] * 1000,
+        output_units="mas",
     )
-    photometric_sigma = calcPhotometricUncertainty(SNR)
-    astrSigDeg = (astrSig.values * u.mas).to(u.deg).value
+    detDF["trailedSourceMagSigma"] = calcPhotometricUncertainty(detDF["SNRTrailedSourceMag"])
+    detDF["astrometricSigma_deg"] = (detDF["astrometricSigma_deg"].values * u.mas).to(u.deg).value
 
-    return (astrSigDeg, photometric_sigma, SNR)
+    # we don't apply dMag in this case because we're looking at the uncertainty on the PSF mag
+    # which already has a different trailing loss applied for the stellar PSF matching/filtering
+
+    _, detDF["SNRPSFMag"], _ = calcAstrometricUncertainty(
+        detDF["PSFMagTrue"],
+        detDF["fiveSigmaDepth_mag"],
+        FWHMeff=detDF["seeingFwhmGeom_arcsec"] * 1000,
+        output_units="mas",
+    )
+    detDF["PSFMagSigma"] = calcPhotometricUncertainty(detDF["SNRPSFMag"])
+
+    return detDF
 
 
 def calcAstrometricUncertainty(
@@ -204,24 +151,20 @@ def calcAstrometricUncertainty(
     m5 : float or array of floats
         5-sigma limiting magnitude.
 
-    nvisit :int, optional
+    nvisit :int, default=1
         number of visits to consider.
-        Default = 1
 
-    FWHMeff : float, optional
+    FWHMeff : float, default=700.0
         effective Full Width at Half Maximum of Point Spread Function [mas].
-        Default = 700.0
 
-    error_sys : float, optional
+    error_sys : float, default=10.0
         systematic error [mas].
-        Default = 10.0
 
-    astErrCoeff : float, optional
+    astErrCoeff : float, default=0.60
         Astrometric error coefficient
         (see calcRandomAstrometricErrorPerCoord description).
-        Default = 0.60
 
-    output_units : string, optional
+    output_units : string, default="mas"
        Default: "mas"  (milliarcseconds)
         other options: "arcsec" (arcseconds)
 
@@ -294,9 +237,8 @@ def calcRandomAstrometricErrorPerCoord(FWHMeff, SNR, AstromErrCoeff=0.60):
     SNR : float or array of floats
         Signal-to-noise ratio.
 
-    AstromErrCoeff : float, optional
+    AstromErrCoeff : float, default=0.60
         Astrometric error coefficient (see description below).
-        Default =0.60
 
     Returns
     -------
